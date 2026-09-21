@@ -1,0 +1,4 @@
+# 用 Python 调用兼容 OpenAI API 格式的大模型
+openai
+# 读取创建的 .env
+python-dotenv
