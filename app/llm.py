@@ -1,4 +1,11 @@
 import os
+import json
+
+from click import argument
+from openai.types.beta import assistant
+from openai.types.beta.threads.runs import tool_call
+
+from app.tools import get_order_status
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -17,20 +24,109 @@ client = OpenAI(
     base_url="https://api.deepseek.com"
 )
 
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_order_status",
+            "description": "根据订单编号查询订单当前状态",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "order_id": {
+                        "type": "string",
+                        "description": "订单编号，例如1001"
+                    }
+                },
+                "required": ["order_id"]
+            }
+        }
+    }
+]
+
 def chat(message:str):
+    messages = [
+        {
+            "role": "system",
+            "content": "你是 AgentHub 中的 AI 助手。"
+        },
+        {
+            "role": "user",
+            "content": message
+        }
+    ]
     # 向大模型发送请求
     response = client.chat.completions.create(
         model="deepseek-flash",
-        messages=[
-            {
-                "role":"system",
-                "content":"你是 AgentHub 中的 AI 助手。"
-            },
-            {
-                "role":"user",
-                "content":message
-            }
-        ]
+        messages=messages
     )
+
+
+
     # 输出模型回答
     return response.choices[0].message.content
+def chat_with_tools(message:str):
+    messages = [
+        {
+            "role": "system",
+            "content": "你是 AgentHub 中的订单助手, 你可以通过工具查询订单状态。"
+        },
+        {
+            "role": "user",
+            "content": message
+        }
+    ]
+    response = client.chat.completions.create(
+        model="deepseek-flash",
+        messages=messages,
+        tools=tools
+    )
+
+    assistant_message = response.choices[0].message
+
+    # 如果模型不需要工具，直接返回回答
+    if not assistant_message.tool_calls:
+        return assistant_message.content
+
+    # 取第一个工具调用
+    tool_call = assistant_message.tool_calls[0]
+
+    # 得到工具名称
+    function_name = tool_call.function.name
+
+    # 得到工具参数
+    arguments = json.loads(tool_call.function.arguments)
+
+    print("模型选择的工具: ", function_name)
+    print("模型生成的参数: ", arguments)
+
+    # 执行工具
+    if function_name == "get_order_status":
+        tool_result = get_order_status(
+            arguments["order_id"]
+        )
+    else:
+        tool_result = "未知工具"
+
+    print("工具执行结果: ", tool_result)
+
+    # 记录模型刚才发出的 Tool Call
+    messages.append(assistant_message)
+
+    # 告诉模型 Tool 的真实执行结果
+    messages.append(
+        {
+            "role": "tool",
+            "tool_call_id": tool_call.id,
+            "content": tool_result
+        }
+    )
+
+    # 第二次调用 LLM
+    final_response = client.chat.completions.create(
+        model="deepseek-flash",
+        messages=messages,
+        tools=tools
+    )
+
+    return final_response.choices[0].message.content
