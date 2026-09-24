@@ -1,11 +1,10 @@
 import os
 import json
 
-from click import argument
-from openai.types.beta import assistant
-from openai.types.beta.threads.runs import tool_call
+
 
 from app.tools import get_order_status
+from app.tools import TOOL_FUNCTIONS
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -40,6 +39,23 @@ tools = [
                 },
                 "required": ["order_id"]
             }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_product_stock",
+            "description": "根据商品编号查询商品当前库存",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "product_id": {
+                        "type": "string",
+                    "description": "商品编号,例如 P001"
+                    }
+                }
+            },
+            "required": ["product_id"]
         }
     }
 ]
@@ -101,12 +117,11 @@ def chat_with_tools(message:str):
     print("模型生成的参数: ", arguments)
 
     # 执行工具
-    if function_name == "get_order_status":
-        tool_result = get_order_status(
-            arguments["order_id"]
-        )
+    tool_function = TOOL_FUNCTIONS.get(function_name)
+    if tool_function:
+        tool_result = tool_function(**arguments)
     else:
-        tool_result = "未知工具"
+        tool_result = "位置工具"
 
     print("工具执行结果: ", tool_result)
 

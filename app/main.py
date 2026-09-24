@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-from app.llm import chat
+from app.llm import chat_with_tools
 
 # 创建一个 Web 后端应用
 app = FastAPI()
@@ -20,7 +20,7 @@ def root():
 # 网页post"/chat"时触发
 @app.post("/chat")
 def chat_api(request: chatRequest):
-    answer = chat(request.message)
+    answer = chat_with_tools(request.message)
     return {
         "answer": answer
     }
