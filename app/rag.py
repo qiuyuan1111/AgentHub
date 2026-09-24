@@ -41,7 +41,8 @@ chunks_embedding = embedding_model.encode(
 
 def search_knowledge_base(
         query: str,
-        top_k: int = 3
+        top_k: int = 3,
+        min_score: float = 0.65
 ) -> list[dict]:
 
     query_embedding = embedding_model.encode(
@@ -54,16 +55,23 @@ def search_knowledge_base(
         query_embedding
     )
 
-    top_indices = np.argsort(scores)[::-1][:top_k]
+    sorted_indices = np.argsort(scores)[::-1]
 
     results = []
 
-    for index in top_indices:
+    for index in sorted_indices:
+        score = float(scores[index])
+
+        if score < min_score:
+            break
         results.append(
             {
                 "text": chunks[index],
-                "score": float(scores[index])
+                "score": score
             }
         )
+
+        if len(results) >= top_k:
+            break
 
     return results
