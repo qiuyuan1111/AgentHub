@@ -9,3 +9,9 @@ fastapi
 
 # 把 FAST API 服务真正运行起来
 uvicorn
+
+#
+sentence-transformers
+
+#
+numpy
