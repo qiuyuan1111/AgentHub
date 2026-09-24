@@ -51,11 +51,32 @@ tools = [
                 "properties": {
                     "product_id": {
                         "type": "string",
-                    "description": "商品编号,例如 P001"
+                        "description": "商品编号,例如 P001"
                     }
                 }
             },
             "required": ["product_id"]
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_knowledge_base",
+            "description": "从公司知识库中检索与用户问题相关的公司政策、售后规则、退款规则等信息",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "需要在公司知识库中检索的问题"
+                    },
+                    "top_k": {
+                        "type": "integer",
+                        "description": "返回最相关的知识片段数量，默认3"
+                    }
+                },
+                "required": ["query"]
+            }
         }
     }
 ]
@@ -113,16 +134,23 @@ def chat_with_tools(message:str):
     # 得到工具参数
     arguments = json.loads(tool_call.function.arguments)
 
-    print("模型选择的工具: ", function_name)
-    print("模型生成的参数: ", arguments)
-
     # 执行工具
     tool_function = TOOL_FUNCTIONS.get(function_name)
     if tool_function:
         tool_result = tool_function(**arguments)
     else:
-        tool_result = "位置工具"
+        tool_result = "未知工具"
 
+    if isinstance(tool_result, str):
+        tool_result_text = tool_result
+    else:
+        tool_result_text = json.dumps(
+            tool_result,
+            ensure_ascii=False
+        )
+
+    print("模型选择的工具: ", function_name)
+    print("模型生成的参数: ", arguments)
     print("工具执行结果: ", tool_result)
 
     # 记录模型刚才发出的 Tool Call
@@ -133,7 +161,7 @@ def chat_with_tools(message:str):
         {
             "role": "tool",
             "tool_call_id": tool_call.id,
-            "content": tool_result
+            "content": tool_result_text
         }
     )
 
