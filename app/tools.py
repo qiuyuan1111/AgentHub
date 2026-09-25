@@ -1,4 +1,5 @@
-from app.rag import search_knowledge_base
+from app.rag import  search_knowledge_base
+
 
 def get_order_status(order_id: str) -> str:
     orders = {

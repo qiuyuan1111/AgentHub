@@ -1,6 +1,6 @@
-from app.rag import search_knowledge_base
+from app.rag import retrieve_candidates
 
-results = search_knowledge_base(
+results = retrieve_candidates(
     "数字商品可以七天无理由吗？"
 )
 
