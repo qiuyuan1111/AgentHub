@@ -83,7 +83,8 @@ def retrieve_candidates(
 def rerank(
     query: str,
     candidates: list[dict],
-    top_k: int = 3
+    top_k: int = 3,
+    min_rerank_score: float = 0.5
 )->list[dict]:
 
     if not candidates:
@@ -117,7 +118,18 @@ def rerank(
         reverse=True
     )
 
-    return reranked_results[:top_k]
+    filtered_results = []
+
+    for item in reranked_results:
+        if item["rerank_score"] < min_rerank_score:
+            break
+
+        filtered_results.append(item)
+
+        if len(filtered_results) >= top_k:
+            break
+
+    return filtered_results
 
 def search_knowledge_base(
         query: str,
