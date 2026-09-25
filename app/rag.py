@@ -1,5 +1,7 @@
+import json
 from pathlib import Path
 
+import faiss
 import numpy as np
 from sentence_transformers import SentenceTransformer, CrossEncoder
 
@@ -7,6 +9,10 @@ from sentence_transformers import SentenceTransformer, CrossEncoder
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 DOCUMENT_PATH = BASE_DIR / "data" / "company_policy.txt"
+STORAGE_DIR = BASE_DIR / "storage"
+INDEX_PATH = STORAGE_DIR / "knowledge.index"
+CHUNKS_PATH = STORAGE_DIR / "chunks.json"
+
 
 # 加载 Embedding 模型
 embedding_model = SentenceTransformer(
@@ -16,6 +22,18 @@ embedding_model = SentenceTransformer(
 reranker_model = CrossEncoder(
     "BAAI/bge-reranker-base"
 )
+
+# 从硬盘加载 FAISS
+index = faiss.read_index(
+    str(INDEX_PATH)
+)
+
+# 加载 chunks.json
+with CHUNKS_PATH.open(
+    "r",
+    encoding="utf-8"
+)as file:
+    chunks = json.load(file)
 
 def load_document():
     text = DOCUMENT_PATH.read_text(
@@ -34,14 +52,7 @@ def split_document(text: str) -> list[str]:
             chunks.append(paragraph)
     return chunks
 
-document_text = load_document()
 
-chunks = split_document(document_text)
-
-chunks_embedding = embedding_model.encode(
-    chunks,
-    normalize_embeddings=True
-)
 
 def retrieve_candidates(
         query: str,
@@ -50,33 +61,40 @@ def retrieve_candidates(
 ) -> list[dict]:
 
     query_embedding = embedding_model.encode(
-        query,
+        [query],
         normalize_embeddings=True
     )
 
-    scores = np.dot(
-        chunks_embedding,
-        query_embedding
+    query_embedding = np.asarray(
+        query_embedding,
+        dtype="float32"
     )
 
-    sorted_indices = np.argsort(scores)[::-1]
+    search_k = min(
+        top_k,
+        index.ntotal
+    )
+
+    # 自动返回降序的分数
+    scores, indices = index.search(
+        query_embedding,
+        search_k
+    )
 
     results = []
 
-    for index in sorted_indices:
-        score = float(scores[index])
+    for score, chunk_index in zip(scores[0], indices[0]):
+        score = float(score)
+        chunk_index = int(chunk_index)
 
         if score < min_score:
             break
         results.append(
             {
-                "text": chunks[index],
+                "text": chunks[chunk_index],
                 "score": score
             }
         )
-
-        if len(results) >= top_k:
-            break
 
     return results
 
