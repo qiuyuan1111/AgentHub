@@ -5,6 +5,13 @@ import faiss
 import numpy as np
 from sentence_transformers import SentenceTransformer, CrossEncoder
 
+
+RETRIEVAL_TOP_N = 5
+RETRIEVAL_MIN_SCORE = 0.4
+
+RERANK_TOP_K = 3
+RERANK_MIN_SCORE = 0.5
+
 # 找到项目根目录
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -56,8 +63,8 @@ def split_document(text: str) -> list[str]:
 
 def retrieve_candidates(
         query: str,
-        top_k: int = 5,
-        min_score: float = 0.65
+        top_n: int = RETRIEVAL_TOP_N,
+        min_score: float = RETRIEVAL_MIN_SCORE
 ) -> list[dict]:
 
     query_embedding = embedding_model.encode(
@@ -71,7 +78,7 @@ def retrieve_candidates(
     )
 
     search_k = min(
-        top_k,
+        top_n,
         index.ntotal
     )
 
@@ -105,8 +112,8 @@ def retrieve_candidates(
 def rerank(
     query: str,
     candidates: list[dict],
-    top_k: int = 3,
-    min_rerank_score: float = 0.5
+    top_k: int = RERANK_TOP_K,
+    min_rerank_score: float = RERANK_MIN_SCORE
 )->list[dict]:
 
     if not candidates:
@@ -161,13 +168,13 @@ def search_knowledge_base(
 ) -> list[dict]:
     candidates = retrieve_candidates(
         query=query,
-        top_k=5,
-        min_score=0.5
+        top_n=5,
+        min_score=0.4
     )
 
     results = rerank(
-        query,
-        candidates,
+        query=query,
+        candidates=candidates,
         top_k=top_k
     )
 

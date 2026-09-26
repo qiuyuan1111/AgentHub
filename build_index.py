@@ -4,6 +4,8 @@ import faiss
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
+CHUNK_SIZE = 80
+CHUNK_OVERLAP = 20
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -19,7 +21,7 @@ embedding_model = SentenceTransformer(
     "BAAI/bge-small-zh-v1.5"
 )
 
-def load_document() -> list[dict]:
+def load_documents() -> list[dict]:
     document = []
 
     # 把 build_index.py 从单文件读取升级成多文件读取
@@ -41,30 +43,54 @@ def load_document() -> list[dict]:
 
 def split_document(
     text: str,
-    source: str
+    source: str,
+    chunk_size: int = 120,
+    overlap: int = 30
 ) -> list[dict]:
+
+    if overlap >= chunk_size:
+        raise ValueError("overlap 必须小于 chunk_size")
+
+    # 去掉多余空行
+    cleaned_text = "\n".join(
+        line.strip()
+        for line in text.splitlines()
+        if line.strip()
+    )
 
     chunks = []
 
+    start = 0
+
     chunk_id = 0
 
-    for paragraph in text.split("\n"):
-        paragraph = paragraph.strip()
-        if not paragraph:
-            continue
+    while start < len(cleaned_text):
 
-        # Chunk 也开始带 Metadata
-        chunks.append(
-            {
-                "text": paragraph,
-                "source": source,
-                "chunk_id": chunk_id
-            }
+        end = min(
+            start + chunk_size,
+            len(cleaned_text)
         )
 
-        chunk_id += 1
+        chunk_text = cleaned_text[start:end].strip()
+
+        if chunk_text:
+            chunks.append(
+                {
+                    "text": chunk_text,
+                    "source": source,
+                    "chunk_id": chunk_id
+                }
+            )
+            chunk_id += 1
+
+        # 已经切到文档结尾
+        if end >= len(cleaned_text):
+            break
+
+        start = end - overlap
 
     return chunks
+
 
 def build_index():
 
@@ -73,7 +99,7 @@ def build_index():
         exist_ok=True
     )
 
-    documents = load_document()
+    documents = load_documents()
 
     chunks = []
 
@@ -82,7 +108,9 @@ def build_index():
 
         document_chunks = split_document(
             text=document["text"],
-            source=document["source"]
+            source=document["source"],
+            chunk_size=CHUNK_SIZE,
+            overlap=CHUNK_OVERLAP
         )
 
         chunks.extend(document_chunks)
