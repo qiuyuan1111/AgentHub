@@ -7,7 +7,7 @@ from sentence_transformers import SentenceTransformer
 
 BASE_DIR = Path(__file__).resolve().parent
 
-DOCUMENT_PATH = BASE_DIR / "data" / "company_policy.txt"
+KNOWLEDGE_DIR = BASE_DIR / "data" / "knowledge"
 
 STORAGE_DIR = BASE_DIR / "storage"
 
@@ -19,18 +19,50 @@ embedding_model = SentenceTransformer(
     "BAAI/bge-small-zh-v1.5"
 )
 
-def load_document() -> str:
-    return DOCUMENT_PATH.read_text(
-        encoding="utf-8"
-    )
+def load_document() -> list[dict]:
+    document = []
 
-def split_document(text: str) -> list[str]:
+    # 把 build_index.py 从单文件读取升级成多文件读取
+    for file_path in KNOWLEDGE_DIR.iterdir():
+
+        if file_path.suffix not in [".txt", ".md"]:
+            continue
+
+        text = file_path.read_text(encoding="utf-8")
+
+        document.append(
+            {
+                "text": text,
+                "source": file_path.name
+            }
+        )
+
+    return document
+
+def split_document(
+    text: str,
+    source: str
+) -> list[dict]:
+
     chunks = []
+
+    chunk_id = 0
 
     for paragraph in text.split("\n"):
         paragraph = paragraph.strip()
-        if paragraph:
-            chunks.append(paragraph)
+        if not paragraph:
+            continue
+
+        # Chunk 也开始带 Metadata
+        chunks.append(
+            {
+                "text": paragraph,
+                "source": source,
+                "chunk_id": chunk_id
+            }
+        )
+
+        chunk_id += 1
 
     return chunks
 
@@ -41,12 +73,27 @@ def build_index():
         exist_ok=True
     )
 
-    document_text = load_document()
+    documents = load_document()
 
-    chunks = split_document(document_text)
+    chunks = []
+
+    # 把所有文档 Chunk 合并
+    for document in documents:
+
+        document_chunks = split_document(
+            text=document["text"],
+            source=document["source"]
+        )
+
+        chunks.extend(document_chunks)
+
+    chunk_texts = []
+
+    for chunk in chunks:
+        chunk_texts.append(chunk["text"])
 
     embeddings = embedding_model.encode(
-        chunks,
+        chunk_texts,
         normalize_embeddings=True
     )
 

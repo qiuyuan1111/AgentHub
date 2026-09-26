@@ -89,9 +89,13 @@ def retrieve_candidates(
 
         if score < min_score:
             break
+
+        chunk = chunks[chunk_index]
         results.append(
             {
-                "text": chunks[chunk_index],
+                "text": chunk["text"],
+                "source": chunk["source"],
+                "chunk_id": chunk["chunk_id"],
                 "score": score
             }
         )
@@ -126,6 +130,8 @@ def rerank(
         reranked_results.append(
             {
                 "text": candidate["text"],
+                "source": candidate["source"],
+                "chunk_id": candidate["chunk_id"],
                 "retrieval_score": candidate["score"],
                 "rerank_score": float(score)
             }
