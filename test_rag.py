@@ -5,7 +5,8 @@ queries = [
     "商品坏了怎么办？",
     "退款什么时候到账？",
     "VIP会员有什么售后权益？",
-    "公司CEO是谁？"
+    "公司CEO是谁？",
+    "员工服务申请多久完成审核？"
 ]
 
 for query in queries:
@@ -20,9 +21,10 @@ for query in queries:
         continue
 
     for index, result in enumerate(results, start=1):
-        print(f"\n结果 {index}")
+        print(f"\n===== 结果 {index} =====")
         print("文本:", result["text"])
         print("来源:", result["source"])
+        print("页码:", result.get("page"))
         print("Chunk ID:", result["chunk_id"])
         print("Retrieval分数:", result["retrieval_score"])
         print("Rerank分数:", result["rerank_score"])

@@ -3,6 +3,7 @@ from pathlib import Path
 import faiss
 import numpy as np
 from sentence_transformers import SentenceTransformer
+from pypdf import PdfReader
 
 CHUNK_SIZE = 80
 CHUNK_OVERLAP = 20
@@ -27,23 +28,52 @@ def load_documents() -> list[dict]:
     # 把 build_index.py 从单文件读取升级成多文件读取
     for file_path in KNOWLEDGE_DIR.iterdir():
 
-        if file_path.suffix not in [".txt", ".md"]:
-            continue
+        # TXT / Markdown
+        if file_path.suffix.lower()  in [".txt", ".md"]:
 
-        text = file_path.read_text(encoding="utf-8")
+            text = file_path.read_text(encoding="utf-8")
 
-        document.append(
-            {
-                "text": text,
-                "source": file_path.name
-            }
-        )
+            document.append(
+                {
+                    "text": text,
+                    "source": file_path.name,
+                    "page": None
+                }
+            )
+
+        # PDF
+        elif file_path.suffix.lower() == ".pdf":
+            reader = PdfReader(str(file_path))
+
+            for page_number, page in enumerate(
+                reader.pages,
+                start=1
+            ):
+                # 把 PDF 变成 python 字符串
+                text = page.extract_text()
+
+                if not text:
+                    continue
+
+                text = text.strip()
+
+                if not text:
+                    continue
+
+                document.append(
+                    {
+                        "text": text,
+                        "source": file_path.name,
+                        "page": page_number
+                    }
+                )
 
     return document
 
 def split_document(
     text: str,
     source: str,
+    page: int | None = None,
     chunk_size: int = 120,
     overlap: int = 30
 ) -> list[dict]:
@@ -78,6 +108,7 @@ def split_document(
                 {
                     "text": chunk_text,
                     "source": source,
+                    "page": page,
                     "chunk_id": chunk_id
                 }
             )
@@ -109,6 +140,7 @@ def build_index():
         document_chunks = split_document(
             text=document["text"],
             source=document["source"],
+            page=document["page"],
             chunk_size=CHUNK_SIZE,
             overlap=CHUNK_OVERLAP
         )

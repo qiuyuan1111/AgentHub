@@ -102,6 +102,7 @@ def retrieve_candidates(
             {
                 "text": chunk["text"],
                 "source": chunk["source"],
+                "page": chunk.get("page"),
                 "chunk_id": chunk["chunk_id"],
                 "score": score
             }
@@ -138,6 +139,7 @@ def rerank(
             {
                 "text": candidate["text"],
                 "source": candidate["source"],
+                "page": candidate.get("page"),
                 "chunk_id": candidate["chunk_id"],
                 "retrieval_score": candidate["score"],
                 "rerank_score": float(score)
