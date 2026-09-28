@@ -102,7 +102,10 @@ def chat(message:str):
 
     # 输出模型回答
     return response.choices[0].message.content
-def chat_with_tools(message:str) -> str:
+def chat_with_tools(
+    message: str,
+    history: list[dict]
+) -> str:
     messages = [
         {
             "role": "system",
@@ -153,13 +156,24 @@ def chat_with_tools(message:str) -> str:
     
                 "回答时应简洁、准确，"
                 "避免加入知识库或业务工具没有提供的额外建议。"
+
+                "不要声称已经永久保存、长期记住或持久记录用户提供的信息。"
+                "只能基于当前会话上下文理解和引用此前内容。"
             )
-        },
+        }
+    ]
+
+    # 加入历史对话
+    if history:
+        messages.extend(history)
+
+    # 加入当前这一轮用户消息
+    messages.append(
         {
             "role": "user",
             "content": message
         }
-    ]
+    )
 
     max_step = 5
 
