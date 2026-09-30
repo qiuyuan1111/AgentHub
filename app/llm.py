@@ -98,13 +98,70 @@ def chat(message:str):
         messages=messages
     )
 
-
-
     # 输出模型回答
     return response.choices[0].message.content
+
+def summarize_memory(
+    old_summary: str,
+    messages: list[dict]
+) -> str:
+    if not messages:
+        return old_summary
+
+    conversation_text = "\n".join(
+        f'{message["role"]}: {message["content"]}'
+        for message in messages
+    )
+
+    response = client.chat.completions.create(
+        model="deepseek-flash",
+        messages=[
+            {
+                "role": "system",
+                "content":  (
+                    "你负责维护一份简洁、准确的会话记忆摘要。"
+                    "请根据旧摘要和新增对话，生成更新后的摘要。"
+            
+                    "只保留未来对话中可能有用的信息，"
+                    "例如用户明确提供的订单号、商品编号、"
+                    "已经讨论的重要事实、用户当前目标、"
+                    "尚未解决的问题以及必要的上下文。"
+            
+                    "对于订单状态、商品库存等可能随时间变化的业务信息，"
+                    "应优先保留订单号、商品编号等用于后续指代解析的信息。"
+                    "如果需要保留历史状态，应明确这是此前查询时的结果，"
+                    "不得把历史状态描述成当前仍然有效的事实。"
+            
+                    "不要编造对话中不存在的信息。"
+                    "不要把临时寒暄或无意义内容写入摘要。"
+            
+                    "如果新对话修改或否定了旧信息，"
+                    "应以较新的信息为准。"
+            
+                    "摘要应简洁，直接输出摘要正文，"
+                    "不要输出解释、标题或其他额外内容。"
+                )
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"旧摘要:\n"
+                    f"{old_summary or '无'}\n\n"
+                    
+                    f"新增对话:\n"
+                    f"{conversation_text}"
+                )
+            }
+        ],
+        temperature=0
+    )
+
+    return response.choices[0].message.content.strip()
+
 def chat_with_tools(
     message: str,
-    history: list[dict]
+    history: list[dict],
+    summary: str = ""
 ) -> str:
     messages = [
         {
@@ -162,6 +219,25 @@ def chat_with_tools(
             )
         }
     ]
+
+    if summary:
+        messages.append(
+            {
+                "role": "system",
+                "content": (
+                    "下面是较早会话内容的压缩摘要，"
+                    "仅用于帮助理解用户当前问题中的上下文和指代：\n"
+                    f"{summary}\n"
+
+                    "如果摘要与最近对话存在冲突，"
+                    "应以最近对话为准。"
+
+                    "订单状态、商品库存等可能变化的业务信息，"
+                    "不能仅依据历史摘要作为当前事实，"
+                    "如用户询问当前状态，应重新调用对应业务工具确认。"
+                )
+            }
+        )
 
     # 加入历史对话
     if history:
