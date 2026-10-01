@@ -9,6 +9,8 @@ from app.tools import TOOL_FUNCTIONS
 from dotenv import load_dotenv
 from openai import OpenAI
 
+MAX_RAG_SEARCHES_PER_REQUEST = 2
+
 # 读取 .env 文件
 load_dotenv()
 
@@ -53,9 +55,9 @@ tools = [
                         "type": "string",
                         "description": "商品编号,例如 P001"
                     }
-                }
-            },
-            "required": ["product_id"]
+                },
+                "required": ["product_id"]
+            }
         }
     },
     {
@@ -100,6 +102,32 @@ def chat(message:str):
 
     # 输出模型回答
     return response.choices[0].message.content
+
+def make_tool_cache_key(
+    tool_name: str,
+    tool_args: dict
+):
+
+    if tool_name != "search_knowledge_base":
+        return None
+
+    query = tool_args.get(
+        "query",
+        ""
+    )
+
+    normalized_query = " ".join(query.strip().lower().split())
+
+    top_k = tool_args.get(
+        "top_k",
+        3
+    )
+
+    return (
+        tool_name,
+        normalized_query,
+        top_k
+    )
 
 def summarize_memory(
     old_summary: str,
@@ -158,6 +186,97 @@ def summarize_memory(
 
     return response.choices[0].message.content.strip()
 
+def execute_tool_with_cache(
+    function_name: str,
+    arguments: dict,
+    tool_cache: dict,
+    tool_state: dict
+):
+
+    tool_function = TOOL_FUNCTIONS.get(
+        function_name
+    )
+
+    if not tool_function:
+        return "未知工具", False
+
+
+    # 生成缓存 Key
+    cache_key = make_tool_cache_key(
+        tool_name=function_name,
+        tool_args=arguments
+    )
+
+
+    # =========================
+    # 1. Exact Cache
+    # =========================
+
+    if (
+        cache_key is not None
+        and cache_key in tool_cache
+    ):
+
+        return (
+            tool_cache[cache_key],
+            True
+        )
+
+
+    # =========================
+    # 2. RAG Search Budget
+    # =========================
+
+    if function_name == "search_knowledge_base":
+
+        rag_search_count = tool_state.get(
+            "rag_search_count",
+            0
+        )
+
+        if (
+            rag_search_count
+            >= MAX_RAG_SEARCHES_PER_REQUEST
+        ):
+
+            return (
+                {
+                    "status": "search_limit_reached",
+                    "message": (
+                        "本轮知识库检索次数已达到上限。"
+                        "请基于本轮已经获得的知识库结果回答用户，"
+                        "不要继续发起知识库检索。"
+                    )
+                },
+                False
+            )
+
+        # 真正准备执行新的 RAG 搜索
+        tool_state["rag_search_count"] = (
+            rag_search_count + 1
+        )
+
+
+    # =========================
+    # 3. 真正执行工具
+    # =========================
+
+    tool_result = tool_function(
+        **arguments
+    )
+
+
+    # =========================
+    # 4. 写入 Cache
+    # =========================
+
+    if cache_key is not None:
+
+        tool_cache[cache_key] = tool_result
+
+
+    return tool_result, False
+
 def chat_with_tools(
     message: str,
     history: list[dict],
@@ -174,6 +293,16 @@ def chat_with_tools(
     
                 "对于公司政策、退款、售后、会员规则、员工服务等知识类问题，"
                 "必须优先调用知识库检索工具查询相关内容。"
+                
+                "对于知识库检索，"
+                "如果第一次检索结果已经包含能够直接回答当前问题的相关证据，"
+                "不要通过改写关键词、增加同义词等方式重复检索同一个问题。"
+                
+                "只有当第一次检索结果为空，"
+                "或者返回内容明显不足以支持回答当前问题时，"
+                "才可以进行第二次知识库检索。"
+                
+                "同一轮用户请求中，应尽量减少不必要的知识库重复检索。"
     
                 "涉及公司政策或业务规则的事实性结论，"
                 "只能依据业务工具或知识库检索结果中的内容回答。"
@@ -183,6 +312,10 @@ def chat_with_tools(
                 "如果知识库返回的内容不足以回答用户的问题，"
                 "应明确说明当前知识库中没有检索到足够的信息，"
                 "不要根据常识、经验或猜测补充答案。"
+                
+                "当知识库检索结果没有提供某项信息时，"
+                "只能表述为“当前检索结果未提供相关信息”或类似措辞。"
+                "不得仅根据一次或有限次数的检索，断言整个知识库中不存在某项内容。"
     
                 "回答知识库相关问题时，"
                 "应优先直接回答用户的问题，"
@@ -253,6 +386,12 @@ def chat_with_tools(
 
     max_step = 5
 
+    tool_cache = {}
+
+    tool_state = {
+        "rag_search_count": 0
+    }
+
     for step in range(max_step):
         response = client.chat.completions.create(
             model="deepseek-flash",
@@ -283,12 +422,33 @@ def chat_with_tools(
             arguments = json.loads(tool_call.function.arguments)
 
             # 执行工具
-            tool_function = TOOL_FUNCTIONS.get(function_name)
-            if not tool_function:
-                tool_result = "未知工具"
-            else:
-                tool_result = tool_function(**arguments)
+            tool_result, cache_hit = execute_tool_with_cache(
+                function_name=function_name,
+                arguments=arguments,
+                tool_cache=tool_cache,
+                tool_state=tool_state
+            )
 
+            if cache_hit:
+                print(
+                    "命中工具缓存:",
+                    function_name,
+                    arguments
+                )
+            else:
+                print(
+                    "真正执行工具:",
+                    function_name,
+                    arguments
+                )
+
+            if function_name == "search_knowledge_base":
+                print(
+                    "本轮真实 RAG 检索次数:",
+                    tool_state["rag_search_count"]
+                )
+
+            # 把工具结果转成字符串
             if isinstance(tool_result, str):
                 tool_result_text = tool_result
             else:
