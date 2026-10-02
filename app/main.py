@@ -1,4 +1,5 @@
-from fastapi import FastAPI
+from fastapi import FastAPI,Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from app.memory import get_recent_history, add_message, get_summary, get_history, clear_session_memory
 from app.llm import chat_with_tools
@@ -8,6 +9,24 @@ from app.schemas import ApiResponse
 
 # 创建一个 Web 后端应用
 app = FastAPI()
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    print(
+        "未处理异常:",
+        repr(exc)
+    )
+
+    response = ApiResponse(
+        code=1001,
+        message="服务器内部错误",
+        data=None
+    )
+
+    return JSONResponse(
+        status_code=500,
+        content=response.model_dump()
+    )
 
 # 限定chatRequest里面一定要有 message
 class chatRequest(BaseModel):
@@ -120,3 +139,5 @@ def health():
         "status": "ok"
         }
     )
+
+
