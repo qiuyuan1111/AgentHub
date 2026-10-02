@@ -4,6 +4,7 @@ from app.memory import get_recent_history, add_message, get_summary, get_history
 from app.llm import chat_with_tools
 from app.memory_manager import update_summary_if_needed
 from app.config import MAX_HISTORY_TURNS
+from app.schemas import ApiResponse
 
 # 创建一个 Web 后端应用
 app = FastAPI()
@@ -82,10 +83,14 @@ def chat_api(request: chatRequest):
     except Exception as e:
         print("Summary 更新失败:", e)
 
-    return {
-        "session_id": request.session_id,
-        "answer": answer
-    }
+    return ApiResponse(
+        code=0,
+        message="success",
+        data={
+            "session_id": request.session_id,
+            "answer": answer
+        }
+    )
 
 @app.get("/memory/{session_id}")
 def get_memory(session_id: str):
@@ -105,3 +110,13 @@ def clear_memory(session_id: str):
         "session_id": session_id,
         "message": "会话记忆已清空"
     }
+
+@app.get("/health")
+def health():
+    return ApiResponse(
+        code=0,
+        message="success",
+        data={
+        "status": "ok"
+        }
+    )
