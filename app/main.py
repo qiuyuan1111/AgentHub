@@ -3,9 +3,7 @@ from pydantic import BaseModel
 from app.memory import get_recent_history, add_message, get_summary, get_history, clear_session_memory
 from app.llm import chat_with_tools
 from app.memory_manager import update_summary_if_needed
-
-
-MAX_HISTORY_TURNS = 5
+from app.config import MAX_HISTORY_TURNS
 
 # 创建一个 Web 后端应用
 app = FastAPI()

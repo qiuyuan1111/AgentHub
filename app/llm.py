@@ -1,6 +1,6 @@
 import os
 import json
-
+import time
 
 
 from app.tools import get_order_status
@@ -9,7 +9,13 @@ from app.tools import TOOL_FUNCTIONS
 from dotenv import load_dotenv
 from openai import OpenAI
 
-MAX_RAG_SEARCHES_PER_REQUEST = 2
+from app.config import (
+    LLM_MODEL,
+    MAX_AGENT_STEPS,
+    MAX_RAG_SEARCHES_PER_REQUEST,
+    DEFAULT_RAG_TOP_K,
+)
+
 
 # 读取 .env 文件
 load_dotenv()
@@ -83,6 +89,7 @@ tools = [
     }
 ]
 
+
 def chat(message:str):
     messages = [
         {
@@ -96,7 +103,7 @@ def chat(message:str):
     ]
     # 向大模型发送请求
     response = client.chat.completions.create(
-        model="deepseek-flash",
+        model=LLM_MODEL,
         messages=messages
     )
 
@@ -120,7 +127,7 @@ def make_tool_cache_key(
 
     top_k = tool_args.get(
         "top_k",
-        3
+        DEFAULT_RAG_TOP_K
     )
 
     return (
@@ -142,7 +149,7 @@ def summarize_memory(
     )
 
     response = client.chat.completions.create(
-        model="deepseek-flash",
+        model=LLM_MODEL,
         messages=[
             {
                 "role": "system",
@@ -277,6 +284,52 @@ def execute_tool_with_cache(
 
     return tool_result, False
 
+
+def print_request_metrics(
+    metrics: dict,
+    tool_state: dict,
+    request_start: float,
+    agent_steps: int
+):
+    total_time = (time.perf_counter() - request_start)
+
+    print("\n========== Request Metrics ==========")
+
+    print(
+        f"Total Time:      {total_time:.3f}s"
+    )
+
+    print(
+        f"Agent Steps:     {agent_steps}"
+    )
+
+    print(
+        f"LLM Calls:       {metrics['llm_calls']}"
+    )
+
+    print(
+        f"LLM Time:        {metrics['llm_time']:.3f}s"
+    )
+
+    print(
+        f"Tool Calls:      {metrics['tool_calls']}"
+    )
+
+    print(
+        f"Tool Time:       {metrics['tool_time']:.3f}s"
+    )
+
+    print(
+        f"RAG Searches:    {tool_state.get('rag_search_count', 0)}"
+    )
+
+    print(
+        f"Cache Hits:      {metrics['cache_hits']}"
+    )
+
+    print("=====================================\n")
+
+
 def chat_with_tools(
     message: str,
     history: list[dict],
@@ -384,22 +437,37 @@ def chat_with_tools(
         }
     )
 
-    max_step = 5
-
     tool_cache = {}
 
     tool_state = {
         "rag_search_count": 0
     }
 
-    for step in range(max_step):
+    request_start = time.perf_counter()
+
+    metrics = {
+        "llm_calls": 0,
+        "llm_time": 0.0,
+        "tool_calls": 0,
+        "tool_time": 0.0,
+        "cache_hits": 0
+    }
+
+    for step in range(MAX_AGENT_STEPS):
+
+        llm_start = time.perf_counter()
+
+
         response = client.chat.completions.create(
             model="deepseek-flash",
             messages=messages,
             tools=tools
         )
 
+        llm_elapsed = time.perf_counter() - llm_start
 
+        metrics["llm_calls"] += 1
+        metrics["llm_time"] += llm_elapsed
 
         assistant_message = response.choices[0].message
 
@@ -408,7 +476,15 @@ def chat_with_tools(
 
         # 如果模型不需要工具，直接返回回答
         if not assistant_message.tool_calls:
+            print_request_metrics(
+                metrics=metrics,
+                tool_state=tool_state,
+                request_start=request_start,
+                agent_steps=step + 1
+            )
+
             return assistant_message.content
+
         # 记录模型发出的 Tool Call
         messages.append(assistant_message)
 
@@ -421,6 +497,8 @@ def chat_with_tools(
             # 得到工具参数
             arguments = json.loads(tool_call.function.arguments)
 
+            tool_start = time.perf_counter()
+
             # 执行工具
             tool_result, cache_hit = execute_tool_with_cache(
                 function_name=function_name,
@@ -429,7 +507,14 @@ def chat_with_tools(
                 tool_state=tool_state
             )
 
+            tool_elapsed = time.perf_counter() - tool_start
+
+            metrics["tool_calls"] += 1
+            metrics["tool_time"] += tool_elapsed
+
             if cache_hit:
+                metrics["cache_hits"] += 1
+
                 print(
                     "命中工具缓存:",
                     function_name,
@@ -471,6 +556,11 @@ def chat_with_tools(
                 }
             )
 
-
+    print_request_metrics(
+        metrics=metrics,
+        tool_state=tool_state,
+        request_start=request_start,
+        agent_steps=MAX_AGENT_STEPS
+    )
 
     return "任务执行步骤过多,请稍后重试。"
