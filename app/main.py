@@ -6,6 +6,7 @@ from app.llm import chat_with_tools
 from app.memory_manager import update_summary_if_needed
 from app.config import MAX_HISTORY_TURNS
 from app.schemas import ApiResponse
+from app.exceptions import AppException
 
 # 创建一个 Web 后端应用
 app = FastAPI()
@@ -25,6 +26,22 @@ async def global_exception_handler(request: Request, exc: Exception):
 
     return JSONResponse(
         status_code=500,
+        content=response.model_dump()
+    )
+
+@app.exception_handler(AppException)
+async def app_exception_handler(
+    request: Request,
+    exc: AppException
+):
+    response = ApiResponse(
+        code=exc.code,
+        message=exc.message,
+        data=None
+    )
+
+    return JSONResponse(
+        status_code=exc.status_code,
         content=response.model_dump()
     )
 
@@ -139,5 +156,6 @@ def health():
         "status": "ok"
         }
     )
+
 
 
