@@ -1,7 +1,7 @@
 from fastapi import FastAPI,Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
-from sympy.polys.domains import field
+from pydantic import BaseModel,Field
+
 
 from app.memory import get_recent_history, add_message, get_summary, get_history, clear_session_memory
 from app.llm import chat_with_tools
@@ -178,8 +178,16 @@ async def app_exception_handler(
 
 # 限定chatRequest里面一定要有 message
 class chatRequest(BaseModel):
-    session_id: str
-    message: str
+
+    session_id: str = Field(
+        min_length=1,
+        max_length=128
+    )
+
+    message: str = Field(
+        min_length=1,
+        max_length=2000
+    )
 
 # 网页get"/"时触发
 @app.get("/")
