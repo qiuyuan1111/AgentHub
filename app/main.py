@@ -1,6 +1,8 @@
 from fastapi import FastAPI,Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from sympy.polys.domains import field
+
 from app.memory import get_recent_history, add_message, get_summary, get_history, clear_session_memory
 from app.llm import chat_with_tools
 from app.memory_manager import update_summary_if_needed
@@ -8,6 +10,7 @@ from app.config import MAX_HISTORY_TURNS
 from app.schemas import ApiResponse
 from app.exceptions import AppException
 from app.logger import get_logger
+from fastapi.exceptions import RequestValidationError
 
 import time
 import uuid
@@ -92,6 +95,47 @@ async def global_exception_handler(request: Request, exc: Exception):
         status_code=500,
         content=response.model_dump()
     )
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(
+    request: Request,
+    exc: RequestValidationError
+):
+    errors = []
+
+    for error in exc.errors():
+
+        field = ".".join(
+            str(item)
+            for item in error["loc"]
+            if item != "body"
+        )
+
+        errors.append(
+            {
+                "field": field,
+                "message": error["msg"],
+                "type": error["type"]
+            }
+        )
+
+        logger.warning(
+            "请求参数校验失败 | errors=%s",
+            errors
+        )
+
+        response = ApiResponse(
+            code=2001,
+            message="请求参数校验失败",
+            data={
+                "errors": errors
+            }
+        )
+
+        return JSONResponse(
+            status_code=422,
+            content=response.model_dump()
+        )
 
 @app.exception_handler(AppException)
 async def app_exception_handler(
