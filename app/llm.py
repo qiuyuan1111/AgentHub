@@ -1,10 +1,11 @@
 import os
 import json
 import time
-
+from asyncio import log
 
 from app.tools import get_order_status
 from app.tools import TOOL_FUNCTIONS
+
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -16,6 +17,10 @@ from app.config import (
     DEFAULT_RAG_TOP_K,
 )
 
+from app.exceptions import AppException
+
+from app.logger import get_logger
+logger = get_logger(__name__)
 
 # 读取 .env 文件
 load_dotenv()
@@ -148,48 +153,55 @@ def summarize_memory(
         for message in messages
     )
 
-    response = client.chat.completions.create(
-        model=LLM_MODEL,
-        messages=[
-            {
-                "role": "system",
-                "content":  (
-                    "你负责维护一份简洁、准确的会话记忆摘要。"
-                    "请根据旧摘要和新增对话，生成更新后的摘要。"
-            
-                    "只保留未来对话中可能有用的信息，"
-                    "例如用户明确提供的订单号、商品编号、"
-                    "已经讨论的重要事实、用户当前目标、"
-                    "尚未解决的问题以及必要的上下文。"
-            
-                    "对于订单状态、商品库存等可能随时间变化的业务信息，"
-                    "应优先保留订单号、商品编号等用于后续指代解析的信息。"
-                    "如果需要保留历史状态，应明确这是此前查询时的结果，"
-                    "不得把历史状态描述成当前仍然有效的事实。"
-            
-                    "不要编造对话中不存在的信息。"
-                    "不要把临时寒暄或无意义内容写入摘要。"
-            
-                    "如果新对话修改或否定了旧信息，"
-                    "应以较新的信息为准。"
-            
-                    "摘要应简洁，直接输出摘要正文，"
-                    "不要输出解释、标题或其他额外内容。"
-                )
-            },
-            {
-                "role": "user",
-                "content": (
-                    f"旧摘要:\n"
-                    f"{old_summary or '无'}\n\n"
-                    
-                    f"新增对话:\n"
-                    f"{conversation_text}"
-                )
-            }
-        ],
-        temperature=0
-    )
+    try:
+        response = client.chat.completions.create(
+            model=LLM_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content":  (
+                        "你负责维护一份简洁、准确的会话记忆摘要。"
+                        "请根据旧摘要和新增对话，生成更新后的摘要。"
+                
+                        "只保留未来对话中可能有用的信息，"
+                        "例如用户明确提供的订单号、商品编号、"
+                        "已经讨论的重要事实、用户当前目标、"
+                        "尚未解决的问题以及必要的上下文。"
+                
+                        "对于订单状态、商品库存等可能随时间变化的业务信息，"
+                        "应优先保留订单号、商品编号等用于后续指代解析的信息。"
+                        "如果需要保留历史状态，应明确这是此前查询时的结果，"
+                        "不得把历史状态描述成当前仍然有效的事实。"
+                
+                        "不要编造对话中不存在的信息。"
+                        "不要把临时寒暄或无意义内容写入摘要。"
+                
+                        "如果新对话修改或否定了旧信息，"
+                        "应以较新的信息为准。"
+                
+                        "摘要应简洁，直接输出摘要正文，"
+                        "不要输出解释、标题或其他额外内容。"
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"旧摘要:\n"
+                        f"{old_summary or '无'}\n\n"
+                        
+                        f"新增对话:\n"
+                        f"{conversation_text}"
+                    )
+                }
+            ],
+            temperature=0
+        )
+    except Exception as e:
+        raise AppException(
+            code=3001,
+            message="大模型服务暂时不可用",
+            status_code=503
+        ) from e
 
     return response.choices[0].message.content.strip()
 
@@ -267,11 +279,19 @@ def execute_tool_with_cache(
     # =========================
     # 3. 真正执行工具
     # =========================
+    try:
+        tool_result = tool_function(
+            **arguments
+        )
+    except AppException:
+        raise
 
-    tool_result = tool_function(
-        **arguments
-    )
-
+    except Exception as e:
+        raise AppException(
+            code=4001,
+            message=f"工具 {function_name} 执行失败",
+            status_code=500
+        ) from e
 
     # =========================
     # 4. 写入 Cache
@@ -285,7 +305,7 @@ def execute_tool_with_cache(
     return tool_result, False
 
 
-def print_request_metrics(
+def log_request_metrics(
     metrics: dict,
     tool_state: dict,
     request_start: float,
@@ -293,41 +313,24 @@ def print_request_metrics(
 ):
     total_time = (time.perf_counter() - request_start)
 
-    print("\n========== Request Metrics ==========")
+    logger.info("========== Request Metrics ==========")
 
-    print(
-        f"Total Time:      {total_time:.3f}s"
+    logger.info(
+        "请求完成 | total=%.3fs | steps=%s | "
+        "llm_calls=%s | llm_time=%.3fs | "
+        "tool_calls=%s | tool_time=%.3fs | "
+        "rag_searches=%s | cache_hits=%s",
+        total_time,
+        agent_steps,
+        metrics["llm_calls"],
+        metrics["llm_time"],
+        metrics["tool_calls"],
+        metrics["tool_time"],
+        tool_state["rag_search_count"],
+        metrics["cache_hits"]
     )
 
-    print(
-        f"Agent Steps:     {agent_steps}"
-    )
-
-    print(
-        f"LLM Calls:       {metrics['llm_calls']}"
-    )
-
-    print(
-        f"LLM Time:        {metrics['llm_time']:.3f}s"
-    )
-
-    print(
-        f"Tool Calls:      {metrics['tool_calls']}"
-    )
-
-    print(
-        f"Tool Time:       {metrics['tool_time']:.3f}s"
-    )
-
-    print(
-        f"RAG Searches:    {tool_state.get('rag_search_count', 0)}"
-    )
-
-    print(
-        f"Cache Hits:      {metrics['cache_hits']}"
-    )
-
-    print("=====================================\n")
+    logger.info("=====================================\n")
 
 
 def chat_with_tools(
@@ -457,12 +460,21 @@ def chat_with_tools(
 
         llm_start = time.perf_counter()
 
+        try:
 
-        response = client.chat.completions.create(
-            model="deepseek-flash",
-            messages=messages,
-            tools=tools
-        )
+
+            response = client.chat.completions.create(
+                model="deepseek-flash",
+                messages=messages,
+                tools=tools
+            )
+
+        except Exception as e:
+            raise AppException(
+                code=3001,
+                message="大模型服务暂时不可用",
+                status_code=503
+            ) from e
 
         llm_elapsed = time.perf_counter() - llm_start
 
@@ -471,12 +483,19 @@ def chat_with_tools(
 
         assistant_message = response.choices[0].message
 
-        print(f"\n===== Agent Step {step + 1} =====")
-        print("LLM 返回：", assistant_message)
+        logger.debug(
+            "Agent Step %s",
+            step + 1
+        )
+
+        logger.debug(
+            "LLM 返回: %s",
+            assistant_message
+        )
 
         # 如果模型不需要工具，直接返回回答
         if not assistant_message.tool_calls:
-            print_request_metrics(
+            log_request_metrics(
                 metrics=metrics,
                 tool_state=tool_state,
                 request_start=request_start,
@@ -515,21 +534,19 @@ def chat_with_tools(
             if cache_hit:
                 metrics["cache_hits"] += 1
 
-                print(
-                    "命中工具缓存:",
-                    function_name,
-                    arguments
+                logger.info(
+                    "工具缓存命中 | name=%s",
+                    function_name
                 )
             else:
-                print(
-                    "真正执行工具:",
-                    function_name,
-                    arguments
+                logger.info(
+                    "真正执行工具 | name=%s",
+                    function_name
                 )
 
             if function_name == "search_knowledge_base":
-                print(
-                    "本轮真实 RAG 检索次数:",
+                logger.debug(
+                    "RAG 检索计数 | count=%s",
                     tool_state["rag_search_count"]
                 )
 
@@ -542,9 +559,17 @@ def chat_with_tools(
                     ensure_ascii=False
                 )
 
-            print("模型选择的工具: ", function_name)
-            print("模型生成的参数: ", arguments)
-            print("工具执行结果: ", tool_result)
+            logger.debug(
+                "工具参数 | name=%s | arguments=%s",
+                function_name,
+                arguments
+            )
+
+            logger.debug(
+                "工具结果 | name=%s | result=%s",
+                function_name,
+                tool_result
+            )
 
 
             # 告诉模型 Tool 的真实执行结果
@@ -556,7 +581,7 @@ def chat_with_tools(
                 }
             )
 
-    print_request_metrics(
+    log_request_metrics(
         metrics=metrics,
         tool_state=tool_state,
         request_start=request_start,

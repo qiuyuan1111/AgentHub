@@ -5,6 +5,9 @@ import faiss
 import numpy as np
 from sentence_transformers import SentenceTransformer, CrossEncoder
 
+from app.logger import get_logger
+logger = get_logger(__name__)
+
 import time
 
 from app.config import (
@@ -37,7 +40,7 @@ reranker_model = CrossEncoder(
 
 def warmup_rag_models():
 
-    print("正在进行 RAG 模型预热...")
+    logger.info("开始 RAG 模型预热")
 
     # 让 Embedding 模型先假跑一次
     embedding_model.encode(
@@ -55,15 +58,16 @@ def warmup_rag_models():
         ]
     )
 
-    print("RAG 模型预热完成")
+    logger.info("RAG 模型预热完成")
 
 warmup_rag_models()
 
-print("Embedding device:", embedding_model.device)
-
-print(
-    "Reranker device:",
-    next(reranker_model.model.parameters()).device
+logger.info(
+    "RAG 模型设备 | embedding=%s | reranker=%s",
+    embedding_model.device,
+    next(
+        reranker_model.model.parameters()
+    ).device
 )
 
 # 从硬盘加载 FAISS
@@ -163,25 +167,18 @@ def retrieve_candidates(
 
     retrieve_time = time.perf_counter() - retrieve_start
 
-    print("\n---------- RAG Retrieve Metrics ----------")
+    logger.debug("---------- RAG Retrieve Metrics ----------")
 
-    print(
-        f"Query Embedding:   {embedding_time:.3f}s"
+    logger.debug(
+        "RAG Retrieve | embedding=%.3fs | faiss=%.3fs | "
+        "total=%.3fs | candidates=%s",
+        embedding_time,
+        faiss_time,
+        retrieve_time,
+        len(candidates)
     )
 
-    print(
-        f"FAISS Search:      {faiss_time:.3f}s"
-    )
-
-    print(
-        f"Retrieve Total:    {retrieve_time:.3f}s"
-    )
-
-    print(
-        f"Candidates:        {len(candidates)}"
-    )
-
-    print("------------------------------------------")
+    logger.debug("------------------------------------------")
 
 
     return candidates
@@ -269,31 +266,24 @@ def rerank(
         - rerank_start
     )
 
-    print("\n---------- RAG Rerank Metrics ----------")
+    logger.debug("---------- RAG Rerank Metrics ----------")
 
-    print(
-        f"Reranker Predict: {predict_time:.3f}s"
+    logger.debug(
+        "RAG Rerank | predict=%.3fs | total=%.3fs | "
+        "candidates=%s | results=%s",
+        predict_time,
+        rerank_time,
+        len(candidates),
+        len(filtered_results)
     )
 
-    print(
-        f"Rerank Total:     {rerank_time:.3f}s"
-    )
-
-    print(
-        f"Input Candidates: {len(candidates)}"
-    )
-
-    print(
-        f"Final Results:    {len(filtered_results)}"
-    )
-
-    print("----------------------------------------")
+    logger.debug("----------------------------------------")
 
     return filtered_results
 
 def search_knowledge_base(
         query: str,
-        top_k: int = 3
+        top_k: int = RERANK_TOP_K
 ) -> list[dict]:
 
     rag_start = time.perf_counter()
@@ -307,7 +297,7 @@ def search_knowledge_base(
     results = rerank(
         query=query,
         candidates=candidates,
-        top_k=RERANK_TOP_K,
+        top_k=top_k,
         min_rerank_score=RERANK_MIN_SCORE
     )
 
@@ -316,20 +306,16 @@ def search_knowledge_base(
         - rag_start
     )
 
-    print("\n========== RAG Metrics ==========")
+    logger.debug("========== RAG Metrics ==========")
 
-    print(
-        f"RAG Total:       {rag_time:.3f}s"
+    logger.debug(
+        "RAG 完成 | total=%.3fs | candidates=%s | results=%s",
+        rag_time,
+        len(candidates),
+        len(results)
     )
 
-    print(
-        f"Candidates:      {len(candidates)}"
-    )
 
-    print(
-        f"Final Results:   {len(results)}"
-    )
-
-    print("=================================\n")
+    logger.debug("=================================\n")
 
     return results

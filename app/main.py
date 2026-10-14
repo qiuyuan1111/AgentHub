@@ -7,15 +7,79 @@ from app.memory_manager import update_summary_if_needed
 from app.config import MAX_HISTORY_TURNS
 from app.schemas import ApiResponse
 from app.exceptions import AppException
+from app.logger import get_logger
+
+import time
+import uuid
+
+logger = get_logger(__name__)
+
+from app.request_context import (
+    set_request_id,
+    reset_request_id
+)
 
 # 创建一个 Web 后端应用
 app = FastAPI()
 
+@app.middleware("http")
+async def request_context_middleware(
+    request: Request,
+    call_next
+):
+    request_id = str(uuid.uuid4())
+
+    # FastAPI request对象中保存一份
+    request.state.request_id = request_id
+
+    # ContextVar中保存一份
+    token = set_request_id(
+        request_id
+    )
+
+    try:
+        start_time = time.perf_counter()
+
+        response = await call_next(request)
+
+        elapsed = time.perf_counter() - start_time
+
+        response.headers["X-Request-Id"] = request_id
+
+        logger.info(
+            "HTTP 请求完成 | "
+            "method=%s | path=%s | "
+            "status=%s | time=%.3fs",
+            request.method,
+            request.url.path,
+            response.status_code,
+            elapsed
+        )
+
+        return response
+    finally:
+        reset_request_id(token)
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    print(
-        "未处理异常:",
-        repr(exc)
+
+    request_id = getattr(
+        request.state,
+        "request_id",
+        "-"
+    )
+
+    logger.error(
+        "未处理异常 | request_id=%s | "
+        "method=%s | path=%s",
+        request_id,
+        request.method,
+        request.url.path,
+        exc_info=(
+            type(exc),
+            exc,
+            exc.__traceback__
+        )
     )
 
     response = ApiResponse(
@@ -34,6 +98,29 @@ async def app_exception_handler(
     request: Request,
     exc: AppException
 ):
+    request_id = getattr(
+        request.state,
+        "request_id",
+        "-"
+    )
+
+    logger.error(
+        "应用异常 | request_id=%s | "
+        "method=%s | path=%s | "
+        "code=%s | status=%s | message=%s",
+        request_id,
+        request.method,
+        request.url.path,
+        exc.code,
+        exc.status_code,
+        exc.message,
+        exc_info=(
+            type(exc),
+            exc,
+            exc.__traceback__
+        )
+    )
+
     response = ApiResponse(
         code=exc.code,
         message=exc.message,
@@ -72,13 +159,15 @@ def chat_api(request: chatRequest):
         max_turns=MAX_HISTORY_TURNS
     )
 
-    print(
-        "当前 Summary:",
+    logger.debug(
+        "当前 Summary | session_id=%s | summary=%s",
+        request.session_id,
         summary
     )
 
-    print(
-        "当前发送给 LLM 的历史:",
+    logger.debug(
+        "当前 Recent History | session_id=%s | history=%s",
+        request.session_id,
         history
     )
 
@@ -104,20 +193,24 @@ def chat_api(request: chatRequest):
     )
 
     try:
+
         # 6. 当前轮结束后，检查有没有消息刚刚滑出窗口
         new_summary = update_summary_if_needed(
             session_id=request.session_id,
             max_turns=MAX_HISTORY_TURNS
         )
 
-        if new_summary:
-            print(
-                "Summary 已更新:",
-                new_summary
-            )
+        logger.info(
+            "Summary 更新成功 | session_id=%s",
+            request.session_id
+        )
 
-    except Exception as e:
-        print("Summary 更新失败:", e)
+    except Exception:
+        logger.warning(
+            "Summary 更新失败 | session_id=%s",
+            request.session_id,
+            exc_info=True
+        )
 
     return ApiResponse(
         code=0,
