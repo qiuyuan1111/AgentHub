@@ -1,6 +1,6 @@
 from fastapi import FastAPI,Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel,Field
+from pydantic import BaseModel,Field,field_validator
 
 
 from app.memory import get_recent_history, add_message, get_summary, get_history, clear_session_memory
@@ -188,6 +188,22 @@ class chatRequest(BaseModel):
         min_length=1,
         max_length=2000
     )
+
+    @field_validator(
+        "session_id",
+        "message",
+        mode="before"
+    )
+
+    @classmethod
+    def strip_text_fields(
+        cls,
+        value
+    ):
+        if isinstance(value, str):
+            return value.strip()
+
+        return value
 
 # 网页get"/"时触发
 @app.get("/")
