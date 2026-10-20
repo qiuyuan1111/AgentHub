@@ -1,7 +1,7 @@
 from app.memory import *
 
 
-session_id = "summary-window-test"
+session_id = "summary-window-tests"
 
 clear_session_memory(session_id)
 
