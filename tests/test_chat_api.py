@@ -2,8 +2,9 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.memory import clear_session_memory
-
 from app.config import MAX_HISTORY_TURNS
+
+from unittest.mock import Mock
 
 client = TestClient(app)
 
@@ -13,39 +14,22 @@ def test_chat_success(monkeypatch):
 
     clear_session_memory(session_id)
 
-    captured = {}
+    mock_chat_with_tools = Mock(
+        return_value="这是一个模拟回答"
+    )
 
-    def fake_chat_with_tools(
-            message,
-            history,
-            summary=""
-    ):
-        captured["message"] = message
-        captured["history"] = history
-        captured["summary"] = summary
-
-        return "这是一个模拟回答"
-
-    summary_captured = {}
-
-    def fake_update_summary_if_needed(
-        session_id,
-        max_turns
-    ):
-        summary_captured["session_id"] = session_id
-
-        summary_captured["max_turns"] = max_turns
-
-        return None
+    mock_update_summary = Mock(
+        return_value=None
+    )
 
     monkeypatch.setattr(
         "app.main.chat_with_tools",
-        fake_chat_with_tools
+        mock_chat_with_tools
     )
 
     monkeypatch.setattr(
         "app.main.update_summary_if_needed",
-        fake_update_summary_if_needed
+        mock_update_summary
     )
 
     response = client.post(
@@ -71,14 +55,14 @@ def test_chat_success(monkeypatch):
     assert "X-Request-ID" in response.headers
 
     # 检查 /chat 真正传给 Agent 的参数
-    assert captured["message"] == "你好"
+    mock_chat_with_tools.assert_called_once_with(
+        message="你好",
+        history=[],
+        summary=""
+    )
 
-    assert captured["history"] == []
-
-    assert captured["summary"] == ""
-
-    assert summary_captured["session_id"] == session_id
-
-    assert summary_captured["max_turns"] == MAX_HISTORY_TURNS
-
+    mock_update_summary.assert_called_once_with(
+        session_id=session_id,
+        max_turns=MAX_HISTORY_TURNS
+    )
     clear_session_memory(session_id)
