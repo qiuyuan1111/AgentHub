@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.memory import clear_session_memory
 
+from app.config import MAX_HISTORY_TURNS
 
 client = TestClient(app)
 
@@ -12,17 +13,29 @@ def test_chat_success(monkeypatch):
 
     clear_session_memory(session_id)
 
+    captured = {}
+
     def fake_chat_with_tools(
             message,
             history,
             summary=""
     ):
+        captured["message"] = message
+        captured["history"] = history
+        captured["summary"] = summary
+
         return "这是一个模拟回答"
+
+    summary_captured = {}
 
     def fake_update_summary_if_needed(
         session_id,
         max_turns
     ):
+        summary_captured["session_id"] = session_id
+
+        summary_captured["max_turns"] = max_turns
+
         return None
 
     monkeypatch.setattr(
@@ -56,5 +69,16 @@ def test_chat_success(monkeypatch):
         "这是一个模拟回答"
 
     assert "X-Request-ID" in response.headers
+
+    # 检查 /chat 真正传给 Agent 的参数
+    assert captured["message"] == "你好"
+
+    assert captured["history"] == []
+
+    assert captured["summary"] == ""
+
+    assert summary_captured["session_id"] == session_id
+
+    assert summary_captured["max_turns"] == MAX_HISTORY_TURNS
 
     clear_session_memory(session_id)
