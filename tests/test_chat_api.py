@@ -224,3 +224,83 @@ def test_chat_sessions_are_isolated(monkeypatch):
 
     clear_session_memory(session_a)
     clear_session_memory(session_b)
+
+def test_chat_recent_history_window(monkeypatch):
+
+    session_id = "test-history-window"
+
+    clear_session_memory(session_id)
+
+    # total_turns 要超过 MAX_HISTORY_TURNS 以验证是否正确截断
+    total_turns = MAX_HISTORY_TURNS + 2
+
+    mock_chat_with_tools = Mock(
+        side_effect=[
+            f"第{i}轮模拟回答"
+            for i in range(1, total_turns + 1)
+        ]
+    )
+
+    mock_update_summary = Mock(
+        return_value=None
+    )
+
+    monkeypatch.setattr(
+        "app.main.chat_with_tools",
+        mock_chat_with_tools
+    )
+
+    monkeypatch.setattr(
+        "app.main.update_summary_if_needed",
+        mock_update_summary
+    )
+
+    for i in range(1, total_turns + 1):
+
+        response = client.post(
+            "/chat",
+            json={
+                "session_id": session_id,
+                "message": f"第{i}轮问题"
+            }
+        )
+        assert response.status_code == 200
+
+
+
+    # 看最后一次调用 Agent 时收到的 history
+    last_call = mock_chat_with_tools.call_args_list[-1]
+
+    assert last_call.kwargs["message"]== f"第{total_turns}轮问题"
+
+    history = last_call.kwargs["history"]
+
+    # Recent History 最多只能有：
+    # MAX_HISTORY_TURNS * 2 条消息
+    assert len(history) == MAX_HISTORY_TURNS * 2
+
+    first_history_turn = total_turns - MAX_HISTORY_TURNS
+
+    assert history[0] == {
+        "role": "user",
+        "content": f"第{first_history_turn}轮问题"
+    }
+
+    assert history[1] == {
+        "role": "assistant",
+        "content": f"第{first_history_turn}轮模拟回答"
+    }
+
+    # 为什么是第 total_turns - 1 轮？
+    # 因为第 total_turns 轮进入 Agent 时，第 total_turns 轮当前问题还没有写进 history。
+    assert history[-2] == {
+        "role": "user",
+        "content": f"第{total_turns - 1}轮问题"
+    }
+
+    assert history[-1] == {
+        "role": "assistant",
+        "content": f"第{total_turns - 1}轮模拟回答"
+    }
+
+    clear_session_memory(session_id)
