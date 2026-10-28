@@ -4,6 +4,7 @@ from app.main import app
 from app.memory import (
     clear_session_memory,
     set_summary,
+    get_history,
 )
 from app.config import MAX_HISTORY_TURNS
 
@@ -355,6 +356,73 @@ def test_chat_receives_existing_summary(monkeypatch):
         summary="用户之前查询过订单1001"
     )
 
-    clear_session_memory(
+    clear_session_memory(session_id)
+
+# Summary 更新失败，不应该让 /chat 失败；主回答仍然返回 200，而且当前这一轮对话仍然保存在 Memory 中。
+def test_chat_still_succeeds_when_summary_fails(monkeypatch):
+
+    session_id = "test-summary-failure"
+
+    clear_session_memory(session_id)
+
+    mock_chat_with_tools = Mock(
+        return_value="主回答正常"
+    )
+
+    mock_update_summary = Mock(
+        side_effect=RuntimeError("模拟 Summary 更新失败")
+    )
+
+    monkeypatch.setattr(
+        "app.main.chat_with_tools",
+        mock_chat_with_tools
+    )
+
+    monkeypatch.setattr(
+        "app.main.update_summary_if_needed",
+        mock_update_summary
+    )
+
+    response = client.post(
+        "/chat",
+        json={
+            "session_id": session_id,
+            "message": "你好"
+        }
+    )
+
+    # Summary 虽然失败，
+    # 但是主请求必须成功
+    assert response.status_code == 200
+
+    body = response.json()
+
+    assert body["code"] == 0
+
+    assert (
+            body["data"]["answer"]
+            == "主回答正常"
+    )
+
+    # 确认 Summary 更新确实被调用过
+    mock_update_summary.assert_called_once()
+
+    # 更重要：
+    # 当前这一轮 user + assistant
+    # 不能因为 Summary 失败而丢失
+    history = get_history(
         session_id
     )
+
+    assert history == [
+        {
+            "role": "user",
+            "content": "你好"
+        },
+        {
+            "role": "assistant",
+            "content": "主回答正常"
+        }
+    ]
+
+    clear_session_memory(session_id)
