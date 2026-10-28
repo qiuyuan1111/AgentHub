@@ -1,7 +1,10 @@
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.memory import clear_session_memory
+from app.memory import (
+    clear_session_memory,
+    set_summary,
+)
 from app.config import MAX_HISTORY_TURNS
 
 from unittest.mock import Mock
@@ -304,3 +307,54 @@ def test_chat_recent_history_window(monkeypatch):
     }
 
     clear_session_memory(session_id)
+
+# Memory 里已经存在的 Summary，/chat 调用 chat_with_tools() 时真的会把它传进去。
+def test_chat_receives_existing_summary(monkeypatch):
+
+    session_id = "test-chat-summary"
+
+    clear_session_memory(session_id)
+
+    # 模拟这个会话之前已经生成过长期摘要
+    set_summary(
+        session_id,
+        "用户之前查询过订单1001"
+    )
+
+    mock_chat_with_tools = Mock(
+        return_value="模拟回答"
+    )
+
+    mock_update_summary = Mock(
+        return_value=None
+    )
+
+    monkeypatch.setattr(
+        "app.main.chat_with_tools",
+        mock_chat_with_tools
+    )
+
+    monkeypatch.setattr(
+        "app.main.update_summary_if_needed",
+        mock_update_summary
+    )
+
+    response = client.post(
+        "/chat",
+        json={
+            "session_id": session_id,
+            "message": "我之前查的是哪个订单？"
+        }
+    )
+
+    assert response.status_code == 200
+
+    mock_chat_with_tools.assert_called_once_with(
+        message="我之前查的是哪个订单？",
+        history=[],
+        summary="用户之前查询过订单1001"
+    )
+
+    clear_session_memory(
+        session_id
+    )
