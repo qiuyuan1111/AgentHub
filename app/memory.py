@@ -103,7 +103,74 @@
 #
 #     return history[-max_messages:].copy()
 
-class InMemoryMemoryStore:
+from abc import ABC, abstractmethod
+
+class MemoryStore(ABC):
+
+    @abstractmethod
+    def get_history(
+        self,
+        session_id: str
+    ) -> list[dict]:
+        pass
+
+    @abstractmethod
+    def add_message(
+        self,
+        session_id: str,
+        role: str,
+        content: str
+    ) -> None:
+        pass
+
+    @abstractmethod
+    def get_recent_history(
+        self,
+        session_id: str,
+        max_turns: int
+    ) -> list[dict]:
+        pass
+
+    @abstractmethod
+    def get_summary(
+        self,
+        session_id: str
+    ) -> str:
+        pass
+
+    @abstractmethod
+    def set_summary(
+        self,
+        session_id: str,
+        summary: str
+    ) -> None:
+        pass
+
+    @abstractmethod
+    def get_messages_to_summarize(
+        self,
+        session_id: str,
+        max_turns: int
+    ) -> list[dict]:
+        pass
+
+    @abstractmethod
+    def mark_messages_summarized(
+        self,
+        session_id: str,
+        message_count: int
+    ) -> None:
+        pass
+
+    @abstractmethod
+    def clear_session_memory(
+        self,
+        session_id: str
+    ) -> None:
+        pass
+
+
+class InMemoryMemoryStore(MemoryStore):
 
     def __init__(self):
 
