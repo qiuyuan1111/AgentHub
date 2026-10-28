@@ -1,3 +1,20 @@
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+#Memory
+MEMORY_BACKEND = os.getenv(
+    "MEMORY_BACKEND",
+    "memory"
+)
+
+# Redis
+REDIS_URL = os.getenv(
+    "REDIS_URL",
+    "redis://localhost:6379/0"
+)
+
 # LLM
 LLM_MODEL = "deepseek-flash"
 
