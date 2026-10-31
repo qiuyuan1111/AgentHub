@@ -105,6 +105,8 @@
 
 from abc import ABC, abstractmethod
 
+from app.config import MEMORY_BACKEND
+
 class MemoryStore(ABC):
 
     @abstractmethod
@@ -289,7 +291,42 @@ class InMemoryMemoryStore(MemoryStore):
             None
         )
 
-memory_store = InMemoryMemoryStore()
+def create_memory_store(
+    backend: str | None = None
+) -> MemoryStore:
+
+    selected_backend = (
+        MEMORY_BACKEND
+        if backend is None
+        else backend
+    )
+
+    selected_backend = (
+        selected_backend
+        .strip()
+        .lower()
+    )
+
+    if selected_backend == "memory":
+        return InMemoryMemoryStore()
+
+    if selected_backend == "redis":
+        # 放在函数内部导入，
+        # 避免循环导入
+        from app.redis_memory import (
+            RedisMemoryStore
+        )
+
+        return RedisMemoryStore()
+
+    raise ValueError(
+        f"不支持的 MEMORY_BACKEND: "
+        f"{selected_backend}"
+    )
+
+
+memory_store: MemoryStore = create_memory_store()
+
 
 def get_history(
     session_id: str

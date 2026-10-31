@@ -4,6 +4,8 @@ from unittest.mock import Mock
 
 from app.redis_memory import RedisMemoryStore
 
+# client 的 get/set 就是 redis 的原生命令
+
 def test_redis_add_and_get_history():
 
     mock_client = Mock()
