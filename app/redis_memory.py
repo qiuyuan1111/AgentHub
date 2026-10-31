@@ -79,28 +79,76 @@ class RedisMemoryStore(MemoryStore):
         self,
         session_id: str
     ) -> str:
-        raise NotImplementedError
+
+        summary = self.client.get(
+            self._summary_key(session_id)
+        )
+
+        return summary or ""
 
     def set_summary(
         self,
         session_id: str,
         summary: str
     ) -> None:
-        raise NotImplementedError
+
+        self.client.set(
+            self._summary_key(session_id),
+            summary
+        )
 
     def get_messages_to_summarize(
         self,
         session_id: str,
         max_turns: int
     ) -> list[dict]:
-        raise NotImplementedError
+
+        messages_key = self._messages_key(session_id)
+
+        total_messages = self.client.llen(messages_key)
+
+        recent_message_count = max_turns * 2
+
+        summarize_end = max(0, total_messages- recent_message_count)
+
+        progress = self.client.get(
+            self._summary_progress_key(session_id)
+        )
+
+        summarized_count = (
+            int(progress)
+            if progress is not None
+            else 0
+        )
+
+        # 没有新增的旧消息需要总结
+        if summarized_count >= summarize_end:
+            return []
+
+        # 因为包含末尾,所以要 summarize_end - 1
+        raw_messages = self.client.lrange(
+            messages_key,
+            summarized_count,
+            summarize_end - 1
+        )
+
+        return [
+            json.loads(message)
+            for message in raw_messages
+        ]
+
 
     def mark_messages_summarized(
         self,
         session_id: str,
         message_count: int
     ) -> None:
-        raise NotImplementedError
+
+        # key 自增 message_count
+        self.client.incrby(
+            self._summary_progress_key(session_id),
+            message_count
+        )
 
     def clear_session_memory(self, session_id: str) -> None:
         self.client.delete(
