@@ -1,0 +1,42 @@
+# docker 环境配置
+services:
+  redis:
+    # redis 的环境镜像
+    image: redis:7-alpine
+
+    # 容器名
+    container_name: agenthub-redis
+
+    # 容器异常退出自动重启，docker 关机时不会强行拉起
+    restart: unless-stopped
+
+    # 端口号
+    # 宿主机端口:容器内部端口
+    ports:
+      - "6379:6379"
+
+    # 把 redis 数据持久化到磁盘
+    # 数据卷名字:容器内路径
+    volumes:
+      - agenthub-redis-data:/data
+
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+
+    # 健康检查：持续检测容器内 Redis 服务是不是真的正常可用
+    healthcheck:
+      test:
+        - CMD
+        - redis-cli
+        - ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+
+# 如果不写 `name`，docker compose 默认会自动给卷加前缀，格式是【项目名_agenthub-redis-data】
+volumes:
+  agenthub-redis-data:
+    name: agenthub-redis-data
