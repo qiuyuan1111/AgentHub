@@ -157,4 +157,8 @@ class RedisMemoryStore(MemoryStore):
             self._summary_progress_key(session_id)
         )
 
+    def health_check(self) -> bool:
 
+        return bool(
+            self.client.ping()
+        )

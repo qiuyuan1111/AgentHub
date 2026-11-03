@@ -171,6 +171,9 @@ class MemoryStore(ABC):
     ) -> None:
         pass
 
+    @abstractmethod
+    def health_check(self) -> bool:
+        pass
 
 class InMemoryMemoryStore(MemoryStore):
 
@@ -291,6 +294,10 @@ class InMemoryMemoryStore(MemoryStore):
             None
         )
 
+    # 只要对象能正常存在就健康
+    def health_check(self) -> bool:
+        return True
+
 def create_memory_store(
     backend: str | None = None
 ) -> MemoryStore:
@@ -407,3 +414,7 @@ def clear_session_memory(
     memory_store.clear_session_memory(
         session_id
     )
+
+def check_memory_store_health() -> bool:
+
+    return memory_store.health_check()
