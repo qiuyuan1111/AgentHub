@@ -10,12 +10,47 @@ from app.config import MAX_HISTORY_TURNS
 from app.schemas import ApiResponse
 from app.exceptions import AppException
 from app.logger import get_logger
+from app.config import MEMORY_BACKEND
+from app.memory import check_memory_store_health
 from fastapi.exceptions import RequestValidationError
+
+from contextlib import asynccontextmanager
 
 import time
 import uuid
 
 logger = get_logger(__name__)
+
+# 在 FastAPI 应用正式接收请求之前，执行启动前置校验；校验失败直接阻止服务启动。
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+
+    logger.info(
+        "开始检查会话存储 | backend=%s",
+        MEMORY_BACKEND
+    )
+
+    try:
+        healthy = check_memory_store_health()
+        if not healthy:
+            raise RuntimeError("会话存储健康检查未通过")
+
+    except Exception:
+        logger.exception(
+            "会话存储健康检查失败 | backend=%s",
+            MEMORY_BACKEND
+        )
+        raise # 上抛给 FastAPI 用于阻止 FastAPI 启动
+
+    logger.info(
+        "会话存储健康检查通过 | backend=%s",
+        MEMORY_BACKEND
+    )
+
+    # 到这里说明启动检查全部通过
+    # `yield`：控制权交给 FastAPI，服务启动成功，开始接收 HTTP 请求
+    yield
+
 
 from app.request_context import (
     set_request_id,
@@ -23,7 +58,9 @@ from app.request_context import (
 )
 
 # 创建一个 Web 后端应用
-app = FastAPI()
+app = FastAPI(
+    lifespan=lifespan
+)
 
 @app.middleware("http")
 async def request_context_middleware(
