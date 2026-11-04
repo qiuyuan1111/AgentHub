@@ -21,6 +21,12 @@ import uuid
 
 logger = get_logger(__name__)
 
+def initialize_rag() -> None:
+
+    from app.rag import warmup_rag_models
+
+    warmup_rag_models()
+
 # 在 FastAPI 应用正式接收请求之前，执行启动前置校验；校验失败直接阻止服务启动。
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -46,6 +52,17 @@ async def lifespan(app: FastAPI):
         "会话存储健康检查通过 | backend=%s",
         MEMORY_BACKEND
     )
+
+    logger.info("开始初始化 RAG")
+
+    try:
+        initialize_rag()
+
+    except Exception:
+        logger.exception("RAG 初始化失败")
+        raise
+
+    logger.info("RAG 初始化完成")
 
     # 到这里说明启动检查全部通过
     # `yield`：控制权交给 FastAPI，服务启动成功，开始接收 HTTP 请求
