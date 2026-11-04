@@ -30,26 +30,68 @@ import torch
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 # 加载 Embedding 模型
-embedding_model = SentenceTransformer(
-    "BAAI/bge-small-zh-v1.5"
-)
+embedding_model = None
 
-reranker_model = CrossEncoder(
-    "BAAI/bge-reranker-base"
-)
+reranker_model = None
+
+def get_embedding_model():
+
+    # 声明这个变量是全局变量
+    global embedding_model
+
+    if embedding_model is None:
+
+        logger.info(
+            "开始加载 Embedding 模型 | device=%s",
+            DEVICE
+        )
+
+        embedding_model = SentenceTransformer(
+            "BAAI/bge-small-zh-v1.5",
+            device=DEVICE
+        )
+
+        logger.info("Embedding 模型加载完成")
+
+    return embedding_model
+
+
+def get_reranker_model():
+
+    global reranker_model
+
+    if reranker_model is None:
+
+        logger.info(
+            "开始加载 Reranker 模型 | device=%s",
+            DEVICE
+        )
+
+        reranker_model = CrossEncoder(
+            "BAAI/bge-reranker-base",
+            device=DEVICE
+        )
+
+        logger.info("Reranker 模型加载完成")
+
+    return reranker_model
 
 def warmup_rag_models():
 
     logger.info("开始 RAG 模型预热")
 
+    embedding = get_embedding_model()
+
+    reranker = get_reranker_model()
+
     # 让 Embedding 模型先假跑一次
-    embedding_model.encode(
+    embedding.encode(
         ["模型预热"],
         normalize_embeddings=True
     )
 
     # 让 Reranker 先假跑一次
-    reranker_model.predict(
+    reranker.predict(
         [
             [
                 "模型预热",
@@ -58,17 +100,16 @@ def warmup_rag_models():
         ]
     )
 
+    logger.info(
+        "RAG 模型设备 | embedding=%s | reranker=%s",
+        embedding.device,
+        # 拿到 CrossEncoder 底层 torch 模型第一个权重张量所在的设备
+        next(reranker.model.parameters()).device
+    )
+
     logger.info("RAG 模型预热完成")
 
-warmup_rag_models()
 
-logger.info(
-    "RAG 模型设备 | embedding=%s | reranker=%s",
-    embedding_model.device,
-    next(
-        reranker_model.model.parameters()
-    ).device
-)
 
 # 从硬盘加载 FAISS
 index = faiss.read_index(
@@ -115,7 +156,9 @@ def retrieve_candidates(
 
     embedding_start = time.perf_counter()
 
-    query_embedding = embedding_model.encode(
+    embedding = get_embedding_model()
+
+    query_embedding = embedding.encode(
         [query],
         normalize_embeddings=True
     )
@@ -211,7 +254,8 @@ def rerank(
     # =========================
     predict_start = time.perf_counter()
 
-    rerank_scores = reranker_model.predict(pairs)
+    reranker = get_reranker_model()
+    rerank_scores = reranker.predict(pairs)
 
     predict_time = time.perf_counter() - predict_start
 
