@@ -3,7 +3,7 @@ from pathlib import Path
 
 import faiss
 import numpy as np
-from sentence_transformers import SentenceTransformer, CrossEncoder
+
 
 from app.logger import get_logger
 logger = get_logger(__name__)
@@ -26,8 +26,24 @@ INDEX_PATH = STORAGE_DIR / "knowledge.index"
 CHUNKS_PATH = STORAGE_DIR / "chunks.json"
 
 
-import torch
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+DEVICE = None
+
+def get_device() -> str:
+
+    global DEVICE
+
+    if DEVICE is None:
+
+        import torch
+
+        DEVICE = (
+            "cuda"
+            if torch.cuda.is_available()
+            else "cpu"
+        )
+
+    return DEVICE
 
 # 加载 Embedding 模型
 embedding_model = None
@@ -36,25 +52,31 @@ reranker_model = None
 
 def get_embedding_model():
 
-    # 声明这个变量是全局变量
     global embedding_model
 
     if embedding_model is None:
 
+        from sentence_transformers import (
+            SentenceTransformer
+        )
+
+        device = get_device()
+
         logger.info(
             "开始加载 Embedding 模型 | device=%s",
-            DEVICE
+            device
         )
 
         embedding_model = SentenceTransformer(
             "BAAI/bge-small-zh-v1.5",
-            device=DEVICE
+            device=device
         )
 
-        logger.info("Embedding 模型加载完成")
+        logger.info(
+            "Embedding 模型加载完成"
+        )
 
     return embedding_model
-
 
 def get_reranker_model():
 
@@ -62,17 +84,25 @@ def get_reranker_model():
 
     if reranker_model is None:
 
+        from sentence_transformers import (
+            CrossEncoder
+        )
+
+        device = get_device()
+
         logger.info(
             "开始加载 Reranker 模型 | device=%s",
-            DEVICE
+            device
         )
 
         reranker_model = CrossEncoder(
             "BAAI/bge-reranker-base",
-            device=DEVICE
+            device=device
         )
 
-        logger.info("Reranker 模型加载完成")
+        logger.info(
+            "Reranker 模型加载完成"
+        )
 
     return reranker_model
 

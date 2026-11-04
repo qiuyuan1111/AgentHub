@@ -1,24 +1,56 @@
-from app.rag import  search_knowledge_base
+from app.config import DEFAULT_RAG_TOP_K
 
 
-def get_order_status(order_id: str) -> str:
+def search_knowledge_base(
+    query: str,
+    top_k: int = DEFAULT_RAG_TOP_K
+) -> list[dict]:
+
+    from app.rag import (
+        search_knowledge_base as rag_search
+    )
+
+    # 改名字防止无限递归
+    return rag_search(
+        query=query,
+        top_k=top_k
+    )
+
+
+def get_order_status(
+    order_id: str
+) -> str:
+
     orders = {
         "1001": "已支付,正在配送",
         "1002": "待支付",
         "1003": "已完成"
     }
-    return orders.get(order_id, "没有找到这个订单")
 
-def get_product_stock(product_id: str) -> str:
+    return orders.get(
+        order_id,
+        "没有找到这个订单"
+    )
+
+
+def get_product_stock(
+    product_id: str
+) -> str:
+
     products = {
-        "P001":"库存25件",
-        "P002":"库存0件",
-        "P003":"库存102件"
+        "P001": "库存25件",
+        "P002": "库存0件",
+        "P003": "库存102件"
     }
 
-    return products.get(product_id, "没有找到这个商品")
+    return products.get(
+        product_id,
+        "没有找到这个商品"
+    )
+
+
 TOOL_FUNCTIONS = {
-    "get_order_status":get_order_status,
-    "get_product_stock":get_product_stock,
-    "search_knowledge_base":search_knowledge_base
+    "get_order_status": get_order_status,
+    "get_product_stock": get_product_stock,
+    "search_knowledge_base": search_knowledge_base
 }
