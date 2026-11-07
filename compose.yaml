@@ -13,7 +13,7 @@ services:
     # 端口号
     # 宿主机端口:容器内部端口
     ports:
-      - "6379:6379"
+      - "127.0.0.1:16379:6379"
 
     # 把 redis 数据持久化到磁盘
     # 数据卷名字:容器内路径
@@ -39,4 +39,6 @@ services:
 # 如果不写 `name`，docker compose 默认会自动给卷加前缀，格式是【项目名_agenthub-redis-data】
 volumes:
   agenthub-redis-data:
+    # 这个数据卷已经存在，是外部创建的，Compose 直接使用它，不负责创建。
+    external: true
     name: agenthub-redis-data

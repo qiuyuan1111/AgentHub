@@ -70,3 +70,38 @@ def test_app_fails_to_start_when_memory_store_is_unavailable(
             pass
 
     mock_rag_init.assert_not_called()
+
+def test_app_fails_to_start_when_rag_initialization_fails(
+    monkeypatch
+):
+
+    mock_health_check = Mock(
+        return_value=True
+    )
+
+    monkeypatch.setattr(
+        "app.main.check_memory_store_health",
+        mock_health_check
+    )
+
+    mock_rag_init = Mock(
+        side_effect=RuntimeError(
+            "RAG initialization failed"
+        )
+    )
+
+    monkeypatch.setattr(
+        "app.main.initialize_rag",
+        mock_rag_init
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="RAG initialization failed"
+    ):
+        # 就是这里触发 mock
+        with TestClient(app):
+            pass
+
+    mock_health_check.assert_called_once_with()
+    mock_rag_init.assert_called_once_with()
