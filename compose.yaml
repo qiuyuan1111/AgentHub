@@ -35,6 +35,41 @@ services:
       timeout: 5s
       retries: 5
 
+  postgres:
+    # 使用镜像：postgres 17 版本，alpine 轻量版（体积小）
+    image: postgres:17-alpine
+    # 容器名字，方便 docker exec / docker stop 直接指定名字
+    container_name: agenthub-postgres
+    # 重启策略：除非手动 stop，否则自动重启（崩溃、宿主机开机都自动拉起）
+    restart: unless-stopped
+
+    ports:
+      # 端口映射格式：宿主机IP:宿主机端口:容器内端口
+      # 容器内部postgres默认5432
+      - "127.0.0.1:15432:5432"
+
+    environment:
+      # 自动创建的数据库名
+      POSTGRES_DB: agenthub
+      # 自动创建的数据库用户名
+      POSTGRES_USER: agenthub
+      # 这个用户的密码
+      POSTGRES_PASSWORD: agenthub_dev_password
+
+    volumes:
+      # 命名卷：持久化pg数据
+      # 数据存在docker管理的卷 agenthub-postgres-data，映射到容器内pg数据目录
+      - agenthub-postgres-data:/var/lib/postgresql/data
+
+    healthcheck:
+      # 健康检查：判断pg是否正常就绪
+      test:
+        - CMD-SHELL # 把后面整串字符串丢给容器里面的 `/bin/sh` 去执行
+        - pg_isready -U agenthub -d agenthub # 用户名 数据库
+      interval: 10s   # 每10s检查一次
+      timeout: 5s     # 单次检查最多等待5s，超时判定失败
+      retries: 5      # 连续失败5次，标记容器 unhealthy
+
 
 # 如果不写 `name`，docker compose 默认会自动给卷加前缀，格式是【项目名_agenthub-redis-data】
 volumes:
@@ -42,3 +77,6 @@ volumes:
     # 这个数据卷已经存在，是外部创建的，Compose 直接使用它，不负责创建。
     external: true
     name: agenthub-redis-data
+
+  agenthub-postgres-data:
+    name: agenthub-postgres-data

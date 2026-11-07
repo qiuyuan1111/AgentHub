@@ -10,17 +10,21 @@ fastapi
 # 把 FAST API 服务真正运行起来
 uvicorn
 
-#
+# 文本向量化模型
 sentence-transformers
 
 #
 numpy
 
-#
+# 向量检索
 faiss-cpu
 
-#
+# PDF解析
 pypdf
 
-#
+# 缓存/会话记忆
 redis
+
+# ORM + PostgreSQL驱动
+sqlalchemy
+psycopg[binary]

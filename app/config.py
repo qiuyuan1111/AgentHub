@@ -37,3 +37,9 @@ RERANK_MIN_SCORE = 0.5
 
 # log
 LOG_LEVEL = "INFO"
+
+#postgresql
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql+psycopg://agenthub:agenthub_dev_password@localhost:15432/agenthub"
+)
