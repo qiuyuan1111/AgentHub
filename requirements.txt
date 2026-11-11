@@ -28,3 +28,6 @@ redis
 # ORM + PostgreSQL驱动
 sqlalchemy
 psycopg[binary]
+
+#
+alembic
