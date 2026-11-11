@@ -1,4 +1,5 @@
-
+from __future__ import annotations
+from typing import TYPE_CHECKING
 # 导入标准库 datetime 模块里的两个对象
 # datetime：用来构造、表示日期时间对象
 # timezone：时区对象，这里使用 timezone.utc 代表UTC零时区
@@ -21,8 +22,12 @@ from sqlalchemy import (
 # mapped_column：用来定义数据表列，等价老版本 Column，是2.0推荐写法
 from sqlalchemy.orm import (
     Mapped,
-    mapped_column
+    mapped_column,
+    relationship
 )
+
+if TYPE_CHECKING:
+    from app.models.agent import Agent
 
 # 从 app.database 导入 Base 基类
 # Base 是声明式基类，继承 Base 的类都会被识别为一张数据库表模型
@@ -59,6 +64,10 @@ class User(Base):
         nullable=False      # 不允许为空，姓名必填
     )
 
+    agents: Mapped[list["Agent"]] = relationship(
+        back_populates="owner"
+    )
+
     # created_at 字段：记录创建时间
     # Mapped[datetime]：Python侧类型是datetime时间对象
     created_at: Mapped[datetime] = mapped_column(
@@ -72,12 +81,6 @@ class User(Base):
         nullable=False  # 不允许为NULL，由default自动兜底填充时间
     )
 
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-        nullable=False
-    )
 
     # 记录记录最后一次更新的时间
     updated_at: Mapped[datetime] = mapped_column(
