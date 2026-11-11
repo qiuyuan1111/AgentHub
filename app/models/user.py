@@ -12,7 +12,8 @@ from datetime import (
 # String：数据库字符串类型，对应 MySQL 的 VARCHAR
 from sqlalchemy import (
     DateTime,
-    String
+    String,
+    func
 )
 
 # sqlalchemy.orm 是ORM相关模块，2.0新版声明式写法
@@ -70,3 +71,26 @@ class User(Base):
         ),
         nullable=False  # 不允许为NULL，由default自动兜底填充时间
     )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False
+    )
+
+    # 记录记录最后一次更新的时间
+    updated_at: Mapped[datetime] = mapped_column(
+        # 数据库字段类型：带时区的时间类型
+        DateTime(timezone=True),
+        # server_default：数据库层面的默认值
+        # 新增数据时，由数据库执行 now() 生成当前时间作为初始值
+        # 该配置会反映在建表SQL中，alembic迁移可以识别
+        server_default=func.now(),
+        # onupdate：SQLAlchemy ORM层的更新钩子（⚠️不是数据库原生能力）
+        # 当通过ORM执行update修改本条数据时，自动赋值为当前时间
+        # ⚠️ 直接执行原生SQL、数据库工具修改数据时不会自动刷新
+        onupdate=func.now(),
+        nullable=False
+    )
+
