@@ -4,8 +4,7 @@ from typing import TYPE_CHECKING
 # datetime：用来构造、表示日期时间对象
 # timezone：时区对象，这里使用 timezone.utc 代表UTC零时区
 from datetime import (
-    datetime,
-    timezone
+    datetime
 )
 
 # 从 sqlalchemy 核心包导入数据库字段类型
@@ -72,13 +71,8 @@ class User(Base):
     # Mapped[datetime]：Python侧类型是datetime时间对象
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),  # DateTime(timezone=True)：带时区标记的时间类型
-        # default：ORM层默认值，插入数据不填created_at时自动填充
-        # 必须用lambda包裹：每次新增记录才执行函数获取当前UTC时间
-        # 如果直接写 datetime.now(timezone.utc)，只会在程序启动时计算一次固定时间
-        default=lambda: datetime.now(
-            timezone.utc
-        ),
-        nullable=False  # 不允许为NULL，由default自动兜底填充时间
+        server_default=func.now(),
+        nullable=False  # 不允许为 NULL，由数据库层 server_default 自动生成时间
     )
 
 

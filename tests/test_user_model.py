@@ -49,8 +49,7 @@ def test_user_can_be_saved_and_loaded():
         # scalar：预期查询单条记录，查到返回User对象，查不到返回None
         saved_user = session.scalar(
             select(User).where(
-                User.email
-                == "test@example.com"
+                User.email == "test@example.com"
             )
         )
 

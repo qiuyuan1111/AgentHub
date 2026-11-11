@@ -43,8 +43,7 @@ def test_user_can_have_agents():
 
         saved_agent = session.scalar(
             select(Agent).where(
-                Agent.name
-                == "Customer Support"
+                Agent.name== "Customer Support"
             )
         )
 
@@ -52,12 +51,9 @@ def test_user_can_have_agents():
 
         assert saved_agent.owner.id == user.id
 
-        assert saved_agent.owner.email == (
-            "owner@example.com"
-        )
+        assert saved_agent.owner.email == "owner@example.com"
+
 
         assert len(user.agents) == 1
 
-        assert user.agents[0].name == (
-            "Customer Support"
-        )
+        assert user.agents[0].name == "Customer Support"
