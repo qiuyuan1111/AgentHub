@@ -29,6 +29,7 @@ from app.database import Base
 # 仅类型检查阶段导入User，运行时不会导入，避免循环导入问题
 if TYPE_CHECKING:
     from app.models.user import User
+    from app.models.conversation import Conversation
 
 
 class Agent(Base):
@@ -91,3 +92,7 @@ class Agent(Base):
     owner: Mapped["User"] = relationship(
         back_populates="agents"
     )
+
+    conversations: Mapped[
+        list["Conversation"]
+    ] = relationship(back_populates="agent")
